@@ -123,9 +123,8 @@ local M = {}
 function M.get_default_values()
   return {
     picker = "telescope", -- Default picker remains
-    -- ADDED: Snacks-specific config block
     snacks_picker = {
-      custom_actions = {}, -- No custom actions by default
+      custom_actions = {},
     },
     default_remote = { "upstream", "origin" },
     default_merge_method = "commit",
@@ -463,8 +462,6 @@ function M.validate_config()
     end
   end
 
-  -- REMOVED: local function validate_pickers() ... end
-
   local function validate_aliases()
     if not validate_type(config.ssh_aliases, "ssh_aliases", "table") then
       return
@@ -595,8 +592,7 @@ function M.validate_config()
       validate_type(config.file_panel.use_icons, "file_panel.use_icons", "boolean")
     end
     validate_aliases()
-    -- REMOVED: validate_pickers()
-    validate_snacks_picker() -- Call the new validation function
+    validate_snacks_picker()
     validate_mappings()
   end
 

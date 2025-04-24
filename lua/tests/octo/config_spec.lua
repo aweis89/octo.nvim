@@ -21,14 +21,10 @@ describe("Octo config", function()
         assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
       end)
 
-      -- Tests for the removed picker_config are no longer needed
-
       it("should return invalid when snacks_picker is not a table", function()
         config.values.snacks_picker = "not a table"
         assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
       end)
-
-      -- Removed tests for snacks_picker.mappings
 
       it("should return invalid when snacks_picker.custom_actions is not a table", function()
         config.values.snacks_picker = { custom_actions = "not a table" }

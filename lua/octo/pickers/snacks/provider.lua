@@ -107,7 +107,6 @@ M.issues = function(opts)
           issue.kind = issue.__typename:lower()
         end
 
-        -- Define the hardcoded actions available for *this* picker
         local hardcoded_actions = {
           open_in_browser = function(_picker, item)
             navigation.open_in_browser(item.kind, item.repository.nameWithOwner, item.number)
@@ -116,7 +115,6 @@ M.issues = function(opts)
             local url = item.url
             utils.copy_url(url)
           end,
-          -- Add other issue-specific actions here if needed in the future
         }
 
         -- Build the keys and merged actions using the helper
@@ -137,11 +135,9 @@ M.issues = function(opts)
           end,
           win = {
             input = {
-              -- Use the generated keys
               keys = snacks_config.keys,
             },
           },
-          -- Pass the merged actions (hardcoded + custom)
           actions = snacks_config.actions,
         }
       end
