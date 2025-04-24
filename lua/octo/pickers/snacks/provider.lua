@@ -8,6 +8,30 @@ local Snacks = require "snacks"
 
 local M = {}
 
+--- Builds the key mappings and merged actions for the Snacks picker.
+---@param hardcoded_actions table<string, function> The actions defined directly in the provider function.
+---@param cfg OctoConfig The global Octo configuration.
+---@return { keys: table, actions: table }
+local function build_snacks_config(hardcoded_actions, cfg)
+  local snacks_cfg = cfg.snacks_picker or {} -- Get snacks config, default to empty table if nil
+  local custom_actions = snacks_cfg.custom_actions or {}
+
+  local input_keys = {}
+  -- Start with a deep copy of hardcoded actions to avoid modifying the original
+  local merged_actions = vim.deepcopy(hardcoded_actions)
+
+  -- Process custom actions
+  for action_name, definition in pairs(custom_actions) do
+    if definition.lhs and definition.action then
+      input_keys[definition.lhs] = { action_name, mode = { "n", "i" } }
+      -- Add the custom action function to the merged actions
+      merged_actions[action_name] = definition.action
+    end
+  end
+
+  return { keys = input_keys, actions = merged_actions }
+end
+
 local function get_filter(opts, kind)
   local filter = ""
   local allowed_values = {}
@@ -83,6 +107,21 @@ M.issues = function(opts)
           issue.kind = issue.__typename:lower()
         end
 
+        -- Define the hardcoded actions available for *this* picker
+        local hardcoded_actions = {
+          open_in_browser = function(_picker, item)
+            navigation.open_in_browser(item.kind, item.repository.nameWithOwner, item.number)
+          end,
+          copy_url = function(_picker, item)
+            local url = item.url
+            utils.copy_url(url)
+          end,
+          -- Add other issue-specific actions here if needed in the future
+        }
+
+        -- Build the keys and merged actions using the helper
+        local snacks_config = build_snacks_config(hardcoded_actions, cfg)
+
         Snacks.picker.pick {
           title = opts.preview_title or "",
           items = issues,
@@ -98,21 +137,12 @@ M.issues = function(opts)
           end,
           win = {
             input = {
-              keys = {
-                [cfg.picker_config.mappings.open_in_browser.lhs] = { "open_in_browser", mode = { "n", "i" } },
-                [cfg.picker_config.mappings.copy_url.lhs] = { "copy_url", mode = { "n", "i" } },
-              },
+              -- Use the generated keys
+              keys = snacks_config.keys,
             },
           },
-          actions = {
-            open_in_browser = function(_picker, item)
-              navigation.open_in_browser(item.kind, item.repository.nameWithOwner, item.number)
-            end,
-            copy_url = function(_picker, item)
-              local url = item.url
-              utils.copy_url(url)
-            end,
-          },
+          -- Pass the merged actions (hardcoded + custom)
+          actions = snacks_config.actions,
         }
       end
     end,
@@ -161,6 +191,25 @@ function M.pull_requests(opts)
           pull.kind = pull.__typename:lower() == "pullrequest" and "pull_request" or "unknown"
         end
 
+        -- Define the hardcoded actions available for *this* picker
+        local hardcoded_actions = {
+          open_in_browser = function(_picker, item)
+            navigation.open_in_browser(item.kind, item.repository.nameWithOwner, item.number)
+          end,
+          copy_url = function(_picker, item)
+            utils.copy_url(item.url)
+          end,
+          checkout_pr = function(_picker, item)
+            utils.checkout_pr(item.number)
+          end,
+          merge_pr = function(_picker, item)
+            utils.merge_pr(item.number)
+          end,
+        }
+
+        -- Build the keys and merged actions using the helper
+        local snacks_config = build_snacks_config(hardcoded_actions, cfg)
+
         Snacks.picker.pick {
           title = opts.preview_title or "",
           items = pull_requests,
@@ -176,28 +225,12 @@ function M.pull_requests(opts)
           end,
           win = {
             input = {
-              keys = {
-                [cfg.picker_config.mappings.open_in_browser.lhs] = { "open_in_browser", mode = { "n", "i" } },
-                [cfg.picker_config.mappings.copy_url.lhs] = { "copy_url", mode = { "n", "i" } },
-                [cfg.picker_config.mappings.checkout_pr.lhs] = { "check_out_pr", mode = { "n", "i" } },
-                [cfg.picker_config.mappings.merge_pr.lhs] = { "merge_pr", mode = { "n", "i" } },
-              },
+              -- Use the generated keys
+              keys = snacks_config.keys,
             },
           },
-          actions = {
-            open_in_browser = function(_picker, item)
-              navigation.open_in_browser(item.kind, item.repository.nameWithOwner, item.number)
-            end,
-            copy_url = function(_picker, item)
-              utils.copy_url(item.url)
-            end,
-            check_out_pr = function(_picker, item)
-              utils.checkout_pr(item.number)
-            end,
-            merge_pr = function(_picker, item)
-              utils.merge_pr(item.number)
-            end,
-          },
+          -- Pass the merged actions (hardcoded + custom)
+          actions = snacks_config.actions,
         }
       end
     end,
@@ -256,6 +289,44 @@ function M.notifications(opts)
           end
         end
 
+        -- Define hardcoded actions including the notification-specific one
+        local hardcoded_actions = {
+          open_in_browser = function(_picker, item)
+            navigation.open_in_browser(item.kind, item.repository.full_name, item.subject.number)
+          end,
+          copy_url = function(_picker, item)
+            utils.copy_url(item.url) -- Assuming item.url exists for notifications? Check API if needed.
+          end,
+          mark_notification_read = function(picker, item)
+            local url = string.format("/notifications/threads/%s", item.id)
+            gh.run {
+              args = { "api", "--method", "PATCH", url },
+              headers = { "Accept: application/vnd.github.v3.diff" },
+              cb = function(_, stderr)
+                if stderr and not utils.is_blank(stderr) then
+                  utils.error(stderr)
+                  return
+                end
+              end,
+            }
+            -- TODO: No current way to redraw the list/remove just this item
+            picker:close()
+            M.notifications(opts) -- Refresh list
+          end,
+        }
+
+        -- Build the base config from hardcoded and custom actions
+        local snacks_config = build_snacks_config(hardcoded_actions, cfg)
+
+        -- Check if the user *re-mapped* the notification read action specifically
+        -- using the main mappings table (as it's not part of the generic picker mappings)
+        local read_mapping = cfg.mappings.notification.read
+        if read_mapping and read_mapping.lhs then
+          -- If the user defined a specific key in the main mappings section for this, use it.
+          -- This overrides any potential mapping from custom_actions if the name collided.
+          snacks_config.keys[read_mapping.lhs] = { "mark_notification_read", mode = { "n", "i" } }
+        end
+
         Snacks.picker.pick {
           title = opts.preview_title or "",
           items = safe_notifications,
@@ -273,37 +344,12 @@ function M.notifications(opts)
           end,
           win = {
             input = {
-              keys = {
-                [cfg.picker_config.mappings.open_in_browser.lhs] = { "open_in_browser", mode = { "n", "i" } },
-                [cfg.picker_config.mappings.copy_url.lhs] = { "copy_url", mode = { "n", "i" } },
-                [cfg.mappings.notification.read.lhs] = { "mark_notification_read", mode = { "n", "i" } },
-              },
+              -- Use the generated and potentially overridden keys
+              keys = snacks_config.keys,
             },
           },
-          actions = {
-            open_in_browser = function(_picker, item)
-              navigation.open_in_browser(item.kind, item.repository.full_name, item.subject.number)
-            end,
-            copy_url = function(_picker, item)
-              utils.copy_url(item.url)
-            end,
-            mark_notification_read = function(picker, item)
-              local url = string.format("/notifications/threads/%s", item.id)
-              gh.run {
-                args = { "api", "--method", "PATCH", url },
-                headers = { "Accept: application/vnd.github.v3.diff" },
-                cb = function(_, stderr)
-                  if stderr and not utils.is_blank(stderr) then
-                    utils.error(stderr)
-                    return
-                  end
-                end,
-              }
-              -- TODO: No current way to redraw the list/remove just this item
-              picker:close()
-              M.notifications(opts)
-            end,
-          },
+          -- Pass the merged actions
+          actions = snacks_config.actions,
         }
       end
     end,
@@ -343,6 +389,21 @@ function M.issue_templates(templates, cb)
     ctx.preview:highlight { ft = "markdown" }
   end
 
+  local cfg = octo_config.values
+  -- Define hardcoded actions (only confirm in this case)
+  local hardcoded_actions = {
+    confirm = function(_, item)
+      if type(cb) == "function" then
+        cb(item.template)
+      end
+    end,
+    -- Add other template-specific actions here if needed
+  }
+
+  -- Build the keys and merged actions using the helper
+  -- Note: Default snacks_picker.mappings likely won't apply here unless we add 'confirm' etc.
+  local snacks_config = build_snacks_config(hardcoded_actions, cfg)
+
   Snacks.picker.pick {
     title = "Issue templates",
     items = formatted_templates,
@@ -362,13 +423,14 @@ function M.issue_templates(templates, cb)
       return ret
     end,
     preview = preview_fn, -- Use our custom preview function
-    actions = {
-      confirm = function(_, item)
-        if type(cb) == "function" then
-          cb(item.template)
-        end
-      end,
+    win = {
+      input = {
+        -- Use the generated keys (likely just custom ones + default confirm <cr>)
+        keys = snacks_config.keys,
+      },
     },
+    -- Pass the merged actions (hardcoded + custom)
+    actions = snacks_config.actions,
   }
 end
 
@@ -436,6 +498,20 @@ function M.search(opts)
       end
     end
 
+    -- Define the hardcoded actions available for *this* picker
+    local hardcoded_actions = {
+      open_in_browser = function(_, item)
+        navigation.open_in_browser(item.kind, item.repository.nameWithOwner, item.number)
+      end,
+      copy_url = function(_, item)
+        utils.copy_url(item.url)
+      end,
+      -- Add other search-specific actions here if needed
+    }
+
+    -- Build the keys and merged actions using the helper
+    local snacks_config = build_snacks_config(hardcoded_actions, cfg)
+
     Snacks.picker.pick {
       title = opts.preview_title or "GitHub Search Results",
       items = search_results,
@@ -469,20 +545,12 @@ function M.search(opts)
           minimal = true,
         },
         input = {
-          keys = {
-            [cfg.picker_config.mappings.open_in_browser.lhs] = { "open_in_browser", mode = { "n", "i" } },
-            [cfg.picker_config.mappings.copy_url.lhs] = { "copy_url", mode = { "n", "i" } },
-          },
+          -- Use the generated keys
+          keys = snacks_config.keys,
         },
       },
-      actions = {
-        open_in_browser = function(_, item)
-          navigation.open_in_browser(item.kind, item.repository.nameWithOwner, item.number)
-        end,
-        copy_url = function(_, item)
-          utils.copy_url(item.url)
-        end,
-      },
+      -- Pass the merged actions (hardcoded + custom)
+      actions = snacks_config.actions,
     }
   else
     utils.info "No search results found"

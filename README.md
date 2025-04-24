@@ -119,14 +119,17 @@ require"octo".setup({
   default_merge_method = "commit",         -- default merge method which should be used for both `Octo pr merge` and merging from picker, could be `commit`, `rebase` or `squash`
   default_delete_branch = false,           -- whether to delete branch when merging pull request with either `Octo pr merge` or from picker (can be overridden with `delete`/`nodelete` argument to `Octo pr merge`)
   ssh_aliases = {},                        -- SSH aliases. e.g. `ssh_aliases = {["github.com-work"] = "github.com"}`. The key part will be interpreted as an anchored Lua pattern.
-  picker = "telescope",                    -- or "fzf-lua"
-  picker_config = {
-    use_emojis = false,                    -- only used by "fzf-lua" picker for now
-    mappings = {                           -- mappings for the pickers
-      open_in_browser = { lhs = "<C-b>", desc = "open issue in browser" },
-      copy_url = { lhs = "<C-y>", desc = "copy url to system clipboard" },
-      checkout_pr = { lhs = "<C-o>", desc = "checkout pull request" },
-      merge_pr = { lhs = "<C-r>", desc = "merge pull request" },
+  picker = "telescope",                    -- or "fzf-lua" or "snacks"
+  -- Configuration specific to the Snacks picker (only used if picker = "snacks")
+  snacks_picker = {
+    -- Define completely new actions and keybindings for Snacks pickers
+    custom_actions = {
+      -- Example: Print the selected item's URL
+      -- print_url = {
+      --   lhs = "<leader>pu",
+      --   desc = "Print Item URL",
+      --   action = function(picker, item) print("Selected item URL:", item.url) end
+      -- },
     },
   },
   comment_icon = "▎",                      -- comment marker

@@ -21,13 +21,32 @@ describe("Octo config", function()
         assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
       end)
 
-      it("should return invalid when picker_config isn't a table", function()
-        config.values.picker_config = "cfg"
+      -- Tests for the removed picker_config are no longer needed
+
+      it("should return invalid when snacks_picker is not a table", function()
+        config.values.snacks_picker = "not a table"
         assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
       end)
 
-      it("should return invalid when picker_config.mappings isn't a table", function()
-        config.values.picker_config.mappings = "cfg"
+      -- Removed tests for snacks_picker.mappings
+
+      it("should return invalid when snacks_picker.custom_actions is not a table", function()
+        config.values.snacks_picker = { custom_actions = "not a table" }
+        assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
+      end)
+
+      it("should return invalid when snacks_picker.custom_actions value is not a table", function()
+        config.values.snacks_picker = { custom_actions = { my_action = "not a table" } }
+        assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
+      end)
+
+      it("should return invalid when snacks_picker.custom_actions value is missing action", function()
+        config.values.snacks_picker = { custom_actions = { my_action = { lhs = "a", desc = "b" } } }
+        assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
+      end)
+
+      it("should return invalid when snacks_picker.custom_actions value action is not function", function()
+        config.values.snacks_picker = { custom_actions = { my_action = { lhs = "a", desc = "b", action = "c" } } }
         assert.True(vim.tbl_count(require("octo.config").validate_config()) ~= 0)
       end)
 

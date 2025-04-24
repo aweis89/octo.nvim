@@ -6,9 +6,17 @@ local M = {}
 ---@alias OctoPickers "telescope" | "fzf-lua" | "snacks"
 ---@alias OctoSplit "right" | "left"
 
----@class OctoPickerConfig
----@field use_emojis boolean
----@field mappings table
+-- Snacks Picker specific types
+---@alias OctoSnacksPickerInstance table -- Placeholder type for the Snacks picker instance
+---@alias OctoSnacksPickerItem table -- Placeholder type for the selected item data
+
+---@class OctoSnacksActionDefinition Defines an action for the Snacks picker
+---@field lhs string The keybinding (e.g., "<leader>x").
+---@field desc string A description for the action.
+---@field action fun(picker: OctoSnacksPickerInstance, item: OctoSnacksPickerItem) The function to execute.
+
+---@class OctoSnacksPickerConfig Contains configuration options specific *only* to the Snacks picker
+---@field custom_actions table<string, OctoSnacksActionDefinition> @Optional Define completely new actions and keybindings. The key is the unique name for your custom action.
 
 ---@class OctoConfigColors
 ---@field white string
@@ -69,8 +77,8 @@ local M = {}
 ---@field projects_v2 boolean
 
 ---@class OctoConfig Octo configuration settings
----@field picker OctoPickers
----@field picker_config OctoPickerConfig
+---@field picker OctoPickers -- Selects the picker to use ("telescope", "fzf-lua", "snacks")
+---@field snacks_picker OctoSnacksPickerConfig @Optional Configuration specific to the Snacks picker. Only used if `picker` is set to "snacks".
 ---@field default_remote table
 ---@field default_merge_method string
 ---@field default_delete_branch boolean
@@ -114,15 +122,10 @@ local M = {}
 ---@return OctoConfig
 function M.get_default_values()
   return {
-    picker = "telescope",
-    picker_config = {
-      use_emojis = false,
-      mappings = {
-        open_in_browser = { lhs = "<C-b>", desc = "open issue in browser" },
-        copy_url = { lhs = "<C-y>", desc = "copy url to system clipboard" },
-        checkout_pr = { lhs = "<C-o>", desc = "checkout pull request" },
-        merge_pr = { lhs = "<C-r>", desc = "merge pull request" },
-      },
+    picker = "telescope", -- Default picker remains
+    -- ADDED: Snacks-specific config block
+    snacks_picker = {
+      custom_actions = {}, -- No custom actions by default
     },
     default_remote = { "upstream", "origin" },
     default_merge_method = "commit",
@@ -460,16 +463,7 @@ function M.validate_config()
     end
   end
 
-  local function validate_pickers()
-    validate_string_enum(config.picker, "picker", { "telescope", "fzf-lua", "snacks" })
-
-    if not validate_type(config.picker_config, "picker_config", "table") then
-      return
-    end
-
-    validate_type(config.picker_config.use_emojis, "picker_config.use_emojis", "boolean")
-    validate_type(config.picker_config.mappings, "picker_config.mappings", "table")
-  end
+  -- REMOVED: local function validate_pickers() ... end
 
   local function validate_aliases()
     if not validate_type(config.ssh_aliases, "ssh_aliases", "table") then
@@ -518,6 +512,30 @@ function M.validate_config()
     validate_type(config.notifications.current_repo_only, "notifications.current_repo_only", "boolean")
   end
 
+  -- Add validation for the new top-level snacks_picker config
+  local function validate_snacks_picker()
+    -- Only validate if the table exists (it's optional)
+    if config.snacks_picker then
+      if not validate_type(config.snacks_picker, "snacks_picker", "table") then
+        return -- Stop validation if it's not even a table
+      end
+
+      -- Validate snacks_picker.custom_actions
+      if config.snacks_picker.custom_actions then -- custom_actions itself is optional inside
+        if validate_type(config.snacks_picker.custom_actions, "snacks_picker.custom_actions", "table") then
+          for action_name, definition in pairs(config.snacks_picker.custom_actions) do
+            local base_name = "snacks_picker.custom_actions." .. action_name
+            if validate_type(definition, base_name, "table") then
+              validate_type(definition.lhs, base_name .. ".lhs", "string")
+              validate_type(definition.desc, base_name .. ".desc", "string")
+              validate_type(definition.action, base_name .. ".action", "function")
+            end
+          end
+        end
+      end
+    end
+  end
+
   local function validate_mappings()
     -- TODO(jarviliam): Validate each keymap
     if not validate_type(config.mappings, "mappings", "table") then
@@ -526,6 +544,9 @@ function M.validate_config()
   end
 
   if validate_type(config, "base config", "table") then
+    -- Validate the picker selection itself
+    validate_string_enum(config.picker, "picker", { "telescope", "fzf-lua", "snacks" })
+
     validate_type(config.use_local_fs, "use_local_fs", "boolean")
     validate_type(config.enable_builtin, "enable_builtin", "boolean")
     validate_type(config.snippet_context_lines, "snippet_context_lines", "number")
@@ -574,7 +595,8 @@ function M.validate_config()
       validate_type(config.file_panel.use_icons, "file_panel.use_icons", "boolean")
     end
     validate_aliases()
-    validate_pickers()
+    -- REMOVED: validate_pickers()
+    validate_snacks_picker() -- Call the new validation function
     validate_mappings()
   end
 
